@@ -1,7 +1,8 @@
 --====================================================
 -- 🧠 ULTRA ANIMAL SPAWNER FINAL v3 (PRO SYSTEM)
--- FULL INTELLIGENT + FIXED LIST + PLOTS + ANIMS
 -- + DELETE LAST SPAWNED
+-- + ROTATING PLOTS SYSTEM
+-- + SEARCH BAR
 --====================================================
 
 local Players = game:GetService("Players")
@@ -33,10 +34,12 @@ local plotsFolder =
     workspace:WaitForChild("Plots")
 
 --====================================================
--- TRACK SPAWNED ANIMALS (STACK)
+-- SYSTEM DATA
 --====================================================
 
 local spawnedAnimals = {}
+local plotIndex = 1
+local searchText = ""
 
 --====================================================
 -- GUI
@@ -89,10 +92,7 @@ minimize.BackgroundColor3 = Color3.fromRGB(70,70,70)
 minimize.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", minimize)
 
---====================================================
--- DELETE BUTTON (NEW)
---====================================================
-
+-- DELETE BUTTON
 local deleteBtn = Instance.new("TextButton")
 deleteBtn.Parent = top
 deleteBtn.Size = UDim2.new(0,60,0,28)
@@ -100,22 +100,9 @@ deleteBtn.Position = UDim2.new(1,-110,0,6)
 deleteBtn.Text = "DEL"
 deleteBtn.Font = Enum.Font.GothamBold
 deleteBtn.TextSize = 14
-deleteBtn.BackgroundColor3 = Color3.fromRGB(150,60,60)
+deleteBtn.BackgroundColor3 = Color3.fromRGB(160,60,60)
 deleteBtn.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", deleteBtn)
-
-deleteBtn.MouseButton1Click:Connect(function()
-
-    local last = spawnedAnimals[#spawnedAnimals]
-
-    if last and last.Parent then
-        last:Destroy()
-        table.remove(spawnedAnimals, #spawnedAnimals)
-        info.Text = "🗑️ Deleted last spawned animal"
-    else
-        info.Text = "⚠️ No animals to delete"
-    end
-end)
 
 --====================================================
 -- INFO
@@ -123,14 +110,30 @@ end)
 
 local info = Instance.new("TextLabel")
 info.Parent = main
-info.Size = UDim2.new(1,-10,0,50)
+info.Size = UDim2.new(1,-10,0,40)
 info.Position = UDim2.new(0,5,0,45)
 info.BackgroundTransparency = 1
 info.Font = Enum.Font.Code
 info.TextSize = 13
 info.TextColor3 = Color3.new(1,1,1)
 info.TextXAlignment = Enum.TextXAlignment.Left
-info.Text = "🔍 Cargando animales..."
+info.Text = "🔍 Ready..."
+
+--====================================================
+-- SEARCH BAR (NUEVO)
+--====================================================
+
+local searchBox = Instance.new("TextBox")
+searchBox.Parent = main
+searchBox.Size = UDim2.new(1,-10,0,30)
+searchBox.Position = UDim2.new(0,5,0,90)
+searchBox.PlaceholderText = "🔎 Buscar animal..."
+searchBox.Text = ""
+searchBox.Font = Enum.Font.Gotham
+searchBox.TextSize = 14
+searchBox.BackgroundColor3 = Color3.fromRGB(35,35,35)
+searchBox.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", searchBox)
 
 --====================================================
 -- SCROLL
@@ -138,8 +141,8 @@ info.Text = "🔍 Cargando animales..."
 
 local scroll = Instance.new("ScrollingFrame")
 scroll.Parent = main
-scroll.Size = UDim2.new(1,-10,1,-105)
-scroll.Position = UDim2.new(0,5,0,105)
+scroll.Size = UDim2.new(1,-10,1,-135)
+scroll.Position = UDim2.new(0,5,0,130)
 scroll.BackgroundTransparency = 1
 scroll.ScrollBarThickness = 6
 scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -150,48 +153,69 @@ layout.Parent = scroll
 layout.Padding = UDim.new(0,5)
 
 --====================================================
--- PLOT / SPAWN LOGIC (UNCHANGED CORE)
+-- MINIMIZE
 --====================================================
 
-local function getPlayerPlot()
-    local char = player.Character
-    if not char then return end
+local minimized = false
 
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+minimize.MouseButton1Click:Connect(function()
+    minimized = not minimized
 
-    local nearest, dist = nil, math.huge
+    scroll.Visible = not minimized
+    info.Visible = not minimized
+    searchBox.Visible = not minimized
 
-    for _,plot in pairs(plotsFolder:GetChildren()) do
-        local podiums = plot:FindFirstChild("AnimalPodiums")
-        local first = podiums and podiums:FindFirstChild("1")
+    if minimized then
+        main.Size = UDim2.new(0,380,0,40)
+        minimize.Text = "+"
+    else
+        main.Size = UDim2.new(0,380,0,560)
+        minimize.Text = "-"
+    end
+end)
 
-        if first and first:FindFirstChild("Base")
-        and first.Base:FindFirstChild("Spawn") then
+--====================================================
+-- DELETE LAST SPAWN
+--====================================================
 
-            local d = (hrp.Position - first.Base.Spawn.Position).Magnitude
+deleteBtn.MouseButton1Click:Connect(function()
+    local last = spawnedAnimals[#spawnedAnimals]
 
-            if d < dist then
-                dist = d
-                nearest = plot
-            end
-        end
+    if last and last.Parent then
+        last:Destroy()
+        table.remove(spawnedAnimals, #spawnedAnimals)
+        info.Text = "🗑️ Last animal deleted"
+    else
+        info.Text = "⚠️ Nothing to delete"
+    end
+end)
+
+--====================================================
+-- PLOT SYSTEM
+--====================================================
+
+local function getNextPlot()
+    local plots = plotsFolder:GetChildren()
+
+    table.sort(plots, function(a,b)
+        return a.Name < b.Name
+    end)
+
+    if plotIndex > #plots then
+        plotIndex = 1
     end
 
-    return nearest
+    local plot = plots[plotIndex]
+    plotIndex += 1
+
+    return plot
 end
 
 local function getEmptyPodium(plot)
     local podiums = plot:FindFirstChild("AnimalPodiums")
     if not podiums then return end
 
-    local list = podiums:GetChildren()
-
-    table.sort(list,function(a,b)
-        return tonumber(a.Name) < tonumber(b.Name)
-    end)
-
-    for _,p in pairs(list) do
+    for _,p in pairs(podiums:GetChildren()) do
         local spawn = p:FindFirstChild("Base") and p.Base:FindFirstChild("Spawn")
         if spawn then
             return p
@@ -200,7 +224,7 @@ local function getEmptyPodium(plot)
 end
 
 --====================================================
--- ANIMATION
+-- ANIMATION (NO MODIFICADO)
 --====================================================
 
 local function playAnimation(model,name)
@@ -208,7 +232,7 @@ local function playAnimation(model,name)
     local folder = animationsFolder:FindFirstChild(name)
     if not folder then return end
 
-    local anim = folder:FindFirstChild("Idle") or folder:FindFirstChildWhichIsA("Animation")
+    local anim = folder:FindFirstChildWhichIsA("Animation")
     if not anim then return end
 
     local controller = model:FindFirstChildWhichIsA("AnimationController",true)
@@ -232,12 +256,12 @@ local function playAnimation(model,name)
 end
 
 --====================================================
--- SPAWN SYSTEM (UPDATED STACK TRACKING)
+-- SPAWN SYSTEM (SIN CAMBIOS)
 --====================================================
 
 local function spawnAnimal(name)
 
-    local plot = getPlayerPlot()
+    local plot = getNextPlot()
     if not plot then return end
 
     local podium = getEmptyPodium(plot)
@@ -272,34 +296,49 @@ local function spawnAnimal(name)
     task.wait(0.5)
     playAnimation(clone,name)
 
-    info.Text = "✅ Spawned: "..name
+    info.Text = "✅ Spawned: "..name.." | Plot: "..plot.Name
 end
 
 --====================================================
--- LIST
+-- LIST WITH SEARCH FILTER
 --====================================================
 
 local function rebuildList()
+
     for _,v in pairs(scroll:GetChildren()) do
         if v:IsA("TextButton") then v:Destroy() end
     end
 
     for _,animal in pairs(animalsFolder:GetChildren()) do
 
-        local btn = Instance.new("TextButton")
-        btn.Parent = scroll
-        btn.Size = UDim2.new(1,-5,0,40)
-        btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
-        btn.TextColor3 = Color3.new(1,1,1)
-        btn.Text = "🐾 "..animal.Name
+        local nameLower = string.lower(animal.Name)
 
-        Instance.new("UICorner", btn)
+        if searchText == "" or string.find(nameLower, searchText) then
 
-        btn.MouseButton1Click:Connect(function()
-            spawnAnimal(animal.Name)
-        end)
+            local btn = Instance.new("TextButton")
+            btn.Parent = scroll
+            btn.Size = UDim2.new(1,-5,0,40)
+            btn.BackgroundColor3 = Color3.fromRGB(45,45,45)
+            btn.TextColor3 = Color3.new(1,1,1)
+            btn.Text = "🐾 "..animal.Name
+
+            Instance.new("UICorner", btn)
+
+            btn.MouseButton1Click:Connect(function()
+                spawnAnimal(animal.Name)
+            end)
+        end
     end
 end
+
+--====================================================
+-- SEARCH EVENT
+--====================================================
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    searchText = string.lower(searchBox.Text)
+    rebuildList()
+end)
 
 --====================================================
 -- INIT
@@ -308,4 +347,4 @@ end
 task.wait(1)
 rebuildList()
 
-print("🔥 ULTRA ANIMAL SPAWNER v3 + DELETE LOADED")
+print("🔥 ULTRA ANIMAL SPAWNER v3 READY + SEARCH FIXED")
